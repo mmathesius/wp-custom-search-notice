@@ -3,7 +3,7 @@
  * Plugin Name:       WordPress Custom Search Notice
  * Plugin URI:        https://example.com
  * Description:       Adds a rich text custom notice box above the WordPress search results page.
- * Version:           1.1.3
+ * Version:           1.1.4
  * Author:            Your Name
  * License:           GPLv2 or later
  * Text Domain:       wp-custom-search-notice
@@ -15,21 +15,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * 1. FRONTEND: Inject the Rich Text Custom Notice Box
+ * 1. FRONTEND: Inject the Rich Text Custom Notice Box via Output Buffering
  */
 
-// Core rendering engine for the notice layout box
-function wpcsn_render_search_box_html() {
-    static $has_rendered = false;
-    if ( $has_rendered ) {
-        return '';
-    }
-
+// Core rendering engine for the notice layout box HTML
+function wpcsn_get_search_box_html() {
     $custom_text = get_option( 'wpcsn_search_notice_text', '' );
     
     if ( ! empty( $custom_text ) ) {
-        $has_rendered = true;
-        
         return '<div class="wpcsn-custom-search-box" style="
             background-color: #f0f7ff;
             border-left: 4px solid #0073aa;
@@ -39,36 +32,54 @@ function wpcsn_render_search_box_html() {
             color: #333;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             clear: both;
+            width: 100%;
+            box-sizing: border-box;
         ">' . wp_kses_post( $custom_text ) . '</div>';
     }
     return '';
 }
 
 /**
- * Fix for SUCCESSFUL searches: Prepend to the very first search result item's content.
- * This guarantees it prints inside the main content column, right above the first result.
+ * Intercepts the search template rendering, buffers the HTML, 
+ * and injects our notice exactly at the start of the primary content grid.
  */
-function wpcsn_prepend_to_first_result( $content ) {
-    if ( is_search() && is_main_query() && in_the_loop() ) {
-        $notice = wpcsn_render_search_box_html();
-        if ( ! empty( $notice ) ) {
-            return $notice . $content;
-        }
+function wpcsn_buffer_search_page() {
+    // Only execute on the actual frontend search results page
+    if ( is_search() && is_main_query() ) {
+        ob_start( 'wpcsn_inject_into_buffer' );
     }
-    return $content;
 }
-add_filter( 'the_content', 'wpcsn_prepend_to_first_result', 1 );
-add_filter( 'the_excerpt', 'wpcsn_prepend_to_first_result', 1 ); // Themes using snippets instead of full text
+add_action( 'template_redirect', 'wpcsn_buffer_search_page' );
 
 /**
- * Fix for ZERO MATCH searches: Fallback to the standard no-results hook wrapper.
+ * Buffer parsing callback
  */
-function wpcsn_handle_no_results() {
-    if ( is_search() && is_main_query() ) {
-        echo wpcsn_render_search_box_html();
+function wpcsn_inject_into_buffer( $html ) {
+    $notice_html = wpcsn_get_search_box_html();
+    
+    if ( empty( $notice_html ) ) {
+        return $html;
     }
+
+    // Target the main container opening structure common to modern themes like Elegant Recipe
+    // This look for standard content containers or primary main tags
+    $targets = array(
+        '<div id="content" class="site-content">',
+        '<main id="primary" class="site-main">',
+        '<main id="main" class="site-main">',
+        '<div class="site-content">'
+    );
+
+    foreach ( $targets as $target ) {
+        if ( strpos( $html, $target ) !== false ) {
+            // Inject the notice box directly inside the container opening tag
+            return str_replace( $target, $target . $notice_html, $html );
+        }
+    }
+
+    // Fallback: If no wrappers match, inject right after the closing </header> block
+    return str_replace( '</header>', '</header>' . $notice_html, $html );
 }
-add_action( 'loop_no_results', 'wpcsn_handle_no_results' );
 
 
 /**
