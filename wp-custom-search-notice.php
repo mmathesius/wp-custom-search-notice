@@ -3,7 +3,7 @@
  * Plugin Name:       WordPress Custom Search Notice
  * Plugin URI:        https://example.com
  * Description:       Adds a rich text custom notice box above the WordPress search results page.
- * Version:           1.1.1
+ * Version:           1.1.2
  * Author:            Your Name
  * License:           GPLv2 or later
  * Text Domain:       wp-custom-search-notice
@@ -17,43 +17,50 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * 1. FRONTEND: Inject the Rich Text Custom Notice Box
  */
-function wpcsn_inject_search_textbox() {
-    // Ensure this runs only on the main frontend search query
-    if ( is_search() && is_main_query() ) {
+
+// Helper function to safely output the notice layout box
+function wpcsn_render_search_box_html() {
+    static $has_rendered = false;
+    if ( $has_rendered ) {
+        return;
+    }
+
+    $custom_text = get_option( 'wpcsn_search_notice_text', '' );
+    
+    if ( ! empty( $custom_text ) ) {
+        echo '<div class="wpcsn-custom-search-box" style="
+            background-color: #f0f7ff;
+            border-left: 4px solid #0073aa;
+            padding: 20px;
+            margin-bottom: 25px;
+            border-radius: 4px;
+            color: #333;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        ">';
+        echo wp_kses_post( $custom_text );
+        echo '</div>';
         
-        // Prevent duplicate rendering if a theme triggers the hooks multiple times
-        static $has_rendered = false;
-        if ( $has_rendered ) {
-            return;
-        }
-        
-        // Fetch saved rich text option from the database
-        $custom_text = get_option( 'wpcsn_search_notice_text', '' );
-        
-        // Only output if the editor actually has text
-        if ( ! empty( $custom_text ) ) {
-            echo '<div class="wpcsn-custom-search-box" style="
-                background-color: #f0f7ff;
-                border-left: 4px solid #0073aa;
-                padding: 20px;
-                margin-bottom: 25px;
-                border-radius: 4px;
-                color: #333;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            ">';
-            // Sanitize the HTML output while allowing rich text elements
-            echo wp_kses_post( $custom_text );
-            echo '</div>';
-            
-            $has_rendered = true;
-        }
+        $has_rendered = true;
     }
 }
-// Trigger when a standard search finds matches
-add_action( 'loop_start', 'wpcsn_inject_search_textbox' );
 
-// Trigger as a fallback when a search finds ZERO matches
-add_action( 'loop_no_results', 'wpcsn_inject_search_textbox' );
+// Handler for when matches ARE found
+function wpcsn_handle_loop_start( $query ) {
+    // Crucial check: must be frontend search AND the main query loop, not a menu loop
+    if ( is_search() && is_main_query() && $query->is_search() && $query->is_main_query() ) {
+        wpcsn_render_search_box_html();
+    }
+}
+add_action( 'loop_start', 'wpcsn_handle_loop_start', 10, 1 );
+
+// Handler for when NO matches are found
+function wpcsn_handle_no_results() {
+    // loop_no_results only triggers on the main query template failure
+    if ( is_search() && is_main_query() ) {
+        wpcsn_render_search_box_html();
+    }
+}
+add_action( 'loop_no_results', 'wpcsn_handle_no_results' );
 
 
 /**
