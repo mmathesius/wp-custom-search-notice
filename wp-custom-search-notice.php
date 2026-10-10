@@ -3,7 +3,7 @@
  * Plugin Name:       WordPress Custom Search Notice
  * Plugin URI:        https://example.com
  * Description:       Adds a rich text custom notice box above the WordPress search results page.
- * Version:           1.1.0
+ * Version:           1.1.1
  * Author:            Your Name
  * License:           GPLv2 or later
  * Text Domain:       wp-custom-search-notice
@@ -17,9 +17,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * 1. FRONTEND: Inject the Rich Text Custom Notice Box
  */
-function wpcsn_inject_search_textbox( $query ) {
+function wpcsn_inject_search_textbox() {
     // Ensure this runs only on the main frontend search query
-    if ( is_search() && is_main_query() && did_action( 'loop_start' ) === 1 ) {
+    if ( is_search() && is_main_query() ) {
+        
+        // Prevent duplicate rendering if a theme triggers the hooks multiple times
+        static $has_rendered = false;
+        if ( $has_rendered ) {
+            return;
+        }
         
         // Fetch saved rich text option from the database
         $custom_text = get_option( 'wpcsn_search_notice_text', '' );
@@ -35,13 +41,19 @@ function wpcsn_inject_search_textbox( $query ) {
                 color: #333;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             ">';
-            // Sanitize the HTML output while allowing rich text elements (links, bold, lists, etc.)
+            // Sanitize the HTML output while allowing rich text elements
             echo wp_kses_post( $custom_text );
             echo '</div>';
+            
+            $has_rendered = true;
         }
     }
 }
+// Trigger when a standard search finds matches
 add_action( 'loop_start', 'wpcsn_inject_search_textbox' );
+
+// Trigger as a fallback when a search finds ZERO matches
+add_action( 'loop_no_results', 'wpcsn_inject_search_textbox' );
 
 
 /**
