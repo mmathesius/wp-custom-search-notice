@@ -3,7 +3,7 @@
  * Plugin Name:       WordPress Custom Search Notice
  * Plugin URI:        https://example.com
  * Description:       Adds a rich text custom notice box above the WordPress search results page.
- * Version:           1.1.2
+ * Version:           1.1.3
  * Author:            Your Name
  * License:           GPLv2 or later
  * Text Domain:       wp-custom-search-notice
@@ -18,17 +18,19 @@ if ( ! defined( 'ABSPATH' ) ) {
  * 1. FRONTEND: Inject the Rich Text Custom Notice Box
  */
 
-// Helper function to safely output the notice layout box
+// Core rendering engine for the notice layout box
 function wpcsn_render_search_box_html() {
     static $has_rendered = false;
     if ( $has_rendered ) {
-        return;
+        return '';
     }
 
     $custom_text = get_option( 'wpcsn_search_notice_text', '' );
     
     if ( ! empty( $custom_text ) ) {
-        echo '<div class="wpcsn-custom-search-box" style="
+        $has_rendered = true;
+        
+        return '<div class="wpcsn-custom-search-box" style="
             background-color: #f0f7ff;
             border-left: 4px solid #0073aa;
             padding: 20px;
@@ -36,28 +38,34 @@ function wpcsn_render_search_box_html() {
             border-radius: 4px;
             color: #333;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        ">';
-        echo wp_kses_post( $custom_text );
-        echo '</div>';
-        
-        $has_rendered = true;
+            clear: both;
+        ">' . wp_kses_post( $custom_text ) . '</div>';
     }
+    return '';
 }
 
-// Handler for when matches ARE found
-function wpcsn_handle_loop_start( $query ) {
-    // Crucial check: must be frontend search AND the main query loop, not a menu loop
-    if ( is_search() && is_main_query() && $query->is_search() && $query->is_main_query() ) {
-        wpcsn_render_search_box_html();
+/**
+ * Fix for SUCCESSFUL searches: Prepend to the very first search result item's content.
+ * This guarantees it prints inside the main content column, right above the first result.
+ */
+function wpcsn_prepend_to_first_result( $content ) {
+    if ( is_search() && is_main_query() && in_the_loop() ) {
+        $notice = wpcsn_render_search_box_html();
+        if ( ! empty( $notice ) ) {
+            return $notice . $content;
+        }
     }
+    return $content;
 }
-add_action( 'loop_start', 'wpcsn_handle_loop_start', 10, 1 );
+add_filter( 'the_content', 'wpcsn_prepend_to_first_result', 1 );
+add_filter( 'the_excerpt', 'wpcsn_prepend_to_first_result', 1 ); // Themes using snippets instead of full text
 
-// Handler for when NO matches are found
+/**
+ * Fix for ZERO MATCH searches: Fallback to the standard no-results hook wrapper.
+ */
 function wpcsn_handle_no_results() {
-    // loop_no_results only triggers on the main query template failure
     if ( is_search() && is_main_query() ) {
-        wpcsn_render_search_box_html();
+        echo wpcsn_render_search_box_html();
     }
 }
 add_action( 'loop_no_results', 'wpcsn_handle_no_results' );
