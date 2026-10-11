@@ -3,7 +3,7 @@
  * Plugin Name:       WordPress Custom Search Notice
  * Plugin URI:        https://example.com
  * Description:       Adds a rich text custom notice box above the WordPress search results page.
- * Version:           1.1.4
+ * Version:           1.1.5
  * Author:            Your Name
  * License:           GPLv2 or later
  * Text Domain:       wp-custom-search-notice
@@ -154,3 +154,30 @@ function wpcsn_render_settings_page() {
     </div>
     <?php
 }
+
+
+/**
+ * 5. SHORTCODE: Allow [search_notice] to be used anywhere on the site
+ */
+function wpcsn_register_search_notice_shortcode() {
+    // Reuse the exact same HTML rendering engine
+    $custom_text = get_option( 'wpcsn_search_notice_text', '' );
+    
+    if ( ! empty( $custom_text ) ) {
+        // Return the HTML instead of echoing it so it positions correctly inside the post content
+        return '<div class="wpcsn-custom-search-box" style="
+            background-color: #f0f7ff;
+            border-left: 4px solid #0073aa;
+            padding: 20px;
+            margin-bottom: 25px;
+            border-radius: 4px;
+            color: #333;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            clear: both;
+            width: 100%;
+            box-sizing: border-box;
+        ">' . wp_kses_post( $custom_text ) . '</div>';
+    }
+    return '';
+}
+add_shortcode( 'search_notice', 'wpcsn_register_search_notice_shortcode' );
